@@ -1,1 +1,1 @@
-### Miscellaneous Scratchpad snippets for Gecko-based applications ###
+### Miscellaneous Scratchpad snippets for Firefox and other Gecko-based applications ###
