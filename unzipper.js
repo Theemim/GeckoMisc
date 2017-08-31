@@ -9,8 +9,8 @@
 //
 // This could not unzip FF 57 System Addons when executed in FF ESR 52.3.0,
 // but it could unzip them when executed in FF 57.  There might be other
-// cases where this must be run in a specific or later version in order
-// to unzip certain XPIs.
+// cases where specific application versions must be used to unzip certain
+// files.
 //
 // Based on:
 //
