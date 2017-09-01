@@ -181,7 +181,7 @@ var geckoZipReader = {
       zipReader.close();
       if(fileExtractCompleted) {
         this.displayMsg("File extraction complete:\n\n" + aDir.path);
-        if(this.options.openDirWhenDone) {
+        if(this.options.openDirAfterFilesExtracted) {
           aDir.reveal();
         }
       }
@@ -207,26 +207,47 @@ var geckoZipReader = {
         entries.push(enumerator.getNext());
       }
       entries.sort();
-      var outputStr = entries.length + " entries found:\n\n";
+
+      // https://developer.mozilla.org/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIZipEntry
+      // https://dxr.mozilla.org/mozilla-release/source/modules/libjar/zipstruct.h
+      // http://www.pkware.com/documents/casestudies/APPNOTE.TXT
+      let mozCompMethodDescs =  {
+        0: "STORED",
+        1: "SHRUNK",
+        2: "REDUCED1",
+        3: "REDUCED2",
+        4: "REDUCED3",
+        5: "REDUCED4",
+        6: "IMPLODED",
+        7: "TOKENIZED",
+        8: "DEFLATED",
+        9: "UNSUPPORTED",
+        /* non-standard extension */
+        129 : "MOZ_JAR_BROTLI",  // https://bugzilla.mozilla.org/show_bug.cgi?id=1355661
+      };
+      let outputStr = entries.length + " entries found:\n\n";
       entries.forEach(function(name) {
-        // https://developer.mozilla.org/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIZipEntry
-        var entry = zipReader.getEntry(name);
-        var str = name + "\n";
-        str += "   CompressionType:  " + entry.compression + "\n";
-        str += "   compressedSize:   " + entry.size + "\n";
-        str += "   uncompressedSize: " + entry.realSize + "\n";
-        str += "   isDirectory:      " + entry.isDirectory + "\n";
-        str += "   isSynthetic:      " + entry.isSynthetic + "\n";
-        str += "   lastModifiedTime: " + entry.lastModifiedTime;
-        var lmtDate = new Date(entry.lastModifiedTime/1000);
-        str += "(" + lmtDate.toUTCString() + ")\n";
-        str += "   CRC32:            " + entry.CRC32 + "\n";
+        let entry = zipReader.getEntry(name);
+        let str = name + "\n";
+        str += "   CompressionMethod:  " + entry.compression;
+        if(mozCompMethodDescs.hasOwnProperty(entry.compression)) {
+          str += " (" + mozCompMethodDescs[entry.compression] + ")";
+        }
+        str += "\n";
+        str += "   compressedSize:     " + entry.size + "\n";
+        str += "   uncompressedSize:   " + entry.realSize + "\n";
+        str += "   isDirectory:        " + entry.isDirectory + "\n";
+        str += "   isSynthetic:        " + entry.isSynthetic + "\n";
+        str += "   lastModifiedTime:   " + entry.lastModifiedTime;
+        let lmtDate = new Date(entry.lastModifiedTime/1000);
+        str += " (" + lmtDate.toUTCString() + ")\n";
+        str += "   CRC32:              " + entry.CRC32 + "\n";
         try {
           zipReader.test(name);
-          str += "   IntegrityCheck:   " + "Pass" + "\n";
+          str += "   IntegrityCheck:     " + "Pass" + "\n";
         }
         catch(e) {
-          str += "   IntegrityCheck:   " + "FAIL" + "\n";
+          str += "   IntegrityCheck:     " + "FAIL" + "\n";
         }
         str += "\n";
         outputStr += str;
@@ -248,7 +269,7 @@ var geckoZipReader = {
   },
 
   writeFile: function(file, str) {
-    var result = false;
+    let result = false;
     try {
       // ToDo:
       // let encoder = new TextEncoder();
@@ -267,10 +288,10 @@ var geckoZipReader = {
       // https://bugzilla.mozilla.org/show_bug.cgi?id=1347888
       // Provide chrome JS helpers for reading UTF-8 as string and writing string as UTF-8 file
       // https://bugzilla.mozilla.org/show_bug.cgi?id=1353285
-      var foStream = Components.classes["@mozilla.org/network/file-output-stream;1"]
+      let foStream = Components.classes["@mozilla.org/network/file-output-stream;1"]
                                .createInstance(Components.interfaces.nsIFileOutputStream);
       foStream.init(file, 0x02 | 0x08 | 0x20, parseInt("0666", 8), 0);
-      var converter = Components.classes["@mozilla.org/intl/converter-output-stream;1"]
+      let converter = Components.classes["@mozilla.org/intl/converter-output-stream;1"]
                                 .createInstance(Components.interfaces.nsIConverterOutputStream);
       converter.init(foStream, "UTF-8", 0, 0);
       converter.writeString(str);
