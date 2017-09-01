@@ -240,7 +240,7 @@ var geckoZipReader = {
         str += "   isSynthetic:        " + entry.isSynthetic + "\n";
         str += "   lastModifiedTime:   " + entry.lastModifiedTime;
         let lmtDate = new Date(entry.lastModifiedTime/1000);
-        str += " (" + lmtDate.toUTCString() + ")\n";
+        str += " (" + lmtDate.toISOString() + ")\n";
         str += "   CRC32:              " + entry.CRC32 + "\n";
         try {
           zipReader.test(name);
