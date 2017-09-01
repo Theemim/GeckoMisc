@@ -22,7 +22,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 "use strict";
 
@@ -210,7 +210,7 @@ var geckoZipReader = {
 
       // https://developer.mozilla.org/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIZipEntry
       // https://dxr.mozilla.org/mozilla-release/source/modules/libjar/zipstruct.h
-      // http://www.pkware.com/documents/casestudies/APPNOTE.TXT
+      // https://www.pkware.com/documents/casestudies/APPNOTE.TXT
       let mozCompMethodDescs =  {
         0: "STORED",
         1: "SHRUNK",
