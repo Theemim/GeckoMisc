@@ -221,9 +221,9 @@ var geckoZipReader = {
         6: "IMPLODED",
         7: "TOKENIZED",
         8: "DEFLATED",
-        9: "UNSUPPORTED",
+        255: "UNSUPPORTED",
         /* non-standard extension */
-        129 : "MOZ_JAR_BROTLI",  // https://bugzilla.mozilla.org/show_bug.cgi?id=1355661
+        129: "MOZ_JAR_BROTLI",  // https://bugzilla.mozilla.org/show_bug.cgi?id=1355661
       };
       let outputStr = entries.length + " entries found:\n\n";
       entries.forEach(function(name) {
