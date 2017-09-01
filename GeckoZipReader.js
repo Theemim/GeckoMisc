@@ -1,16 +1,18 @@
-// A Scratchpad snippet which extracts files from zip archives.
-//
-// This version is synchronous and large archives may take a while (be patient).
+// A Scratchpad snippet which extracts metadata and/or files from zip archives.
 //
 // Must be run in browser context.  You may have to "Enable browser chrome
 // and add-on debugging toolboxes" in the Developer Toolbox Options, and in
 // Scratchpad select Browser in the Environment menu. You can change those
 // settings back to what they were when you are done.
 //
-// This could not unzip FF 57 System Addons when executed in FF ESR 52.3.0,
-// but it could unzip them when executed in FF 57.  There might be other
-// cases where specific application versions must be used to unzip certain
-// files.
+// This version is synchronous and large archives may take a while (be patient).
+//
+// Changes in archive format/compression may mean that this snippet has to
+// be executed in specific applications or versions in order to extract files
+// from certain zip archives.  For example, this could not extract the files
+// from Firefox 57 Nightly System Addon XPIs when executed in Firefox ESR
+// 52.3.0.  However, it could extract the files when executed in Firefox 57
+// Nightly.
 //
 // Based on:
 //
@@ -24,10 +26,17 @@
 
 "use strict";
 
-var unzipper = {
-  openWhenDone: false,
+var options = {
+  extractMetadata: false,
+  extractFiles:    true,
+  openDirWhenDone: false,
+};
 
-  start: function () {
+var geckoZipReader = {
+  options: undefined,
+
+  start: function (options) {
+    this.options = options;
     if(typeof(Components) !== "object") {
       throw("Components is not an object.  Are you running in browser context?");
       return;
@@ -52,34 +61,44 @@ var unzipper = {
         return;
       }
     }
-    this.showPicker();
+    this.openFilePicker();
   },
 
-  showPicker: function () {
+  openFilePicker: function () {
     let fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
     fp.init(window, "Select zip archive", fp.modeOpen);
-    fp.appendFilter("Zip archives", "*.zip; *.xpi; *.jar; *.ja");
+    fp.appendFilter("Zip archives", "*.zip; *.xpi; *.jar; *.ja; *.crx");
     fp.appendFilters(fp.filterAll);
+    let self = this;
     let fpCallbackObj = {
       done: function(result) {
         if ((result === fp.returnOK) || (result === fp.returnReplace)) {
-          let file = fp.file;
-          let uri = Services.io.newFileURI(file);
-          // url is a nsIURI;
-          let url = uri.QueryInterface(Ci.nsIURL);
-          let name = url.fileBaseName;
-          let parent = file.parent;
-          parent.append(name);
-          let extractDir = unzipper.uniqueFile(parent);
-          unzipper.extractFiles(file,extractDir);
+          self.processArchive(fp.file);
         }
       }
     };
     fp.open(fpCallbackObj);
   },
 
-  uniqueFile: function(aLocalFile)
-  {
+  processArchive: function(archiveFile) {
+    let uri = Services.io.newFileURI(archiveFile);
+    // url is a nsIURI;
+    let url = uri.QueryInterface(Ci.nsIURL);
+    if(this.options.extractMetadata) {
+      let metadataFile = archiveFile.parent;
+      metadataFile.append(url.fileBaseName + "-metadata.txt");
+      metadataFile = this.uniqueFile(metadataFile);
+      this.extractMetadata(archiveFile, metadataFile);
+    }
+    if(this.options.extractFiles) {
+      let extractDir = archiveFile.parent;
+      extractDir.append(url.fileBaseName);
+      extractDir = this.uniqueFile(extractDir);
+      this.extractFiles(archiveFile, extractDir);
+    }
+  },
+
+  uniqueFile: function(aLocalFile) {
     let collisionCount = 0;
     while (aLocalFile.exists()) {
       collisionCount++;
@@ -100,6 +119,7 @@ var unzipper = {
   },
 
   extractFiles: function extractFiles(aZipFile, aDir) {
+    // ToDo: extractFilesAsync
     function getTargetFile(aDir, entry) {
       let target = aDir.clone();
       entry.split("/").forEach(function(aPart) {
@@ -108,7 +128,7 @@ var unzipper = {
       return target;
     }
 
-    let unzipCompleted = false;
+    let fileExtractCompleted = false;
     let zipReader = Cc["@mozilla.org/libjar/zip-reader;1"].createInstance(Ci.nsIZipReader);
     try {
       zipReader.open(aZipFile);
@@ -152,16 +172,16 @@ var unzipper = {
           return;
         }
       }
-      unzipCompleted = true;
+      fileExtractCompleted = true;
     }
     catch(e) {
-      this.displayError("Exception while unzipping", e);
+      this.displayError("Exception while extracting files", e);
     }
     finally {
       zipReader.close();
-      if(unzipCompleted) {
-        this.displayMsg("Extraction complete:\n\n" + aDir.path);
-        if(this.openWhenDone) {
+      if(fileExtractCompleted) {
+        this.displayMsg("File extraction complete:\n\n" + aDir.path);
+        if(this.options.openDirWhenDone) {
           aDir.reveal();
         }
       }
@@ -169,16 +189,119 @@ var unzipper = {
     }
   },
 
+  extractMetadata: function extractMetadata(aZipFile, aFile) {
+    let metadataExtractCompleted = false;
+    let zipReader = Cc["@mozilla.org/libjar/zip-reader;1"].createInstance(Ci.nsIZipReader);
+    try {
+      zipReader.open(aZipFile);
+    }
+    catch(e) {
+      this.displayError(aZipFile.path + "\n\n is corrupted or is not a ZIP file.", e);
+      return;
+    }
+
+    try {
+      let entries = [];
+      let enumerator = zipReader.findEntries(null);
+      while (enumerator.hasMore()) {
+        entries.push(enumerator.getNext());
+      }
+      entries.sort();
+      var outputStr = entries.length + " entries found:\n\n";
+      entries.forEach(function(name) {
+        // https://developer.mozilla.org/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIZipEntry
+        var entry = zipReader.getEntry(name);
+        var str = name + "\n";
+        str += "   CompressionType:  " + entry.compression + "\n";
+        str += "   compressedSize:   " + entry.size + "\n";
+        str += "   uncompressedSize: " + entry.realSize + "\n";
+        str += "   isDirectory:      " + entry.isDirectory + "\n";
+        str += "   isSynthetic:      " + entry.isSynthetic + "\n";
+        str += "   lastModifiedTime: " + entry.lastModifiedTime;
+        var lmtDate = new Date(entry.lastModifiedTime/1000);
+        str += "(" + lmtDate.toUTCString() + ")\n";
+        str += "   CRC32:            " + entry.CRC32 + "\n";
+        try {
+          zipReader.test(name);
+          str += "   IntegrityCheck:   " + "Pass" + "\n";
+        }
+        catch(e) {
+          str += "   IntegrityCheck:   " + "FAIL" + "\n";
+        }
+        str += "\n";
+        outputStr += str;
+      });
+      if(this.writeFile(aFile, outputStr)) {
+        metadataExtractCompleted = true;
+      }
+    }
+    catch(e) {
+      this.displayError("Exception while extracing metadata", e);
+    }
+    finally {
+      zipReader.close();
+      if(metadataExtractCompleted) {
+        this.displayMsg("Metadata extraction complete:\n\n" + aFile.path);
+      }
+      return;
+    }
+  },
+
+  writeFile: function(file, str) {
+    var result = false;
+    try {
+      // ToDo:
+      // let encoder = new TextEncoder();
+      // let array = encoder.encode(str);
+      // OS.File.writeAtomic(file.path, array, {tmpPath: file.path + ".tmp"}).then(
+      //   function() {
+      //     // Success;
+      //   },
+      //   function(ex) {
+      //     // Failure
+      //   }
+      // );
+      //
+      // ToDo:
+      // Remove nsIConverterOutputStream
+      // https://bugzilla.mozilla.org/show_bug.cgi?id=1347888
+      // Provide chrome JS helpers for reading UTF-8 as string and writing string as UTF-8 file
+      // https://bugzilla.mozilla.org/show_bug.cgi?id=1353285
+      var foStream = Components.classes["@mozilla.org/network/file-output-stream;1"]
+                               .createInstance(Components.interfaces.nsIFileOutputStream);
+      foStream.init(file, 0x02 | 0x08 | 0x20, parseInt("0666", 8), 0);
+      var converter = Components.classes["@mozilla.org/intl/converter-output-stream;1"]
+                                .createInstance(Components.interfaces.nsIConverterOutputStream);
+      converter.init(foStream, "UTF-8", 0, 0);
+      converter.writeString(str);
+      converter.close();
+      result = true;
+    }
+    catch(e if (e.result === Components.results.NS_ERROR_FILE_IS_LOCKED)) {
+      this.displayError("Write failed because file is locked:\n\n" + file.path);
+    }
+    catch(e if (e.result === Components.results.NS_ERROR_FILE_READ_ONLY)) {
+      this.displayError("Write failed because file is readonly:\n\n" + file.path);
+    }
+    catch(e if (e.result === Components.results.NS_ERROR_FILE_ACCESS_DENIED)) {
+      this.displayError("Write failed because access is denied:\n\n" + file.path);
+    }
+    catch(e) {
+      this.displayError("Can't create output file:\n\n" + file.path, e);
+    }
+    return(result);
+  },
+
   displayMsg: function (msg) {
-    Services.prompt.alert(null, "Unzipper", msg + "\n\n");
+    Services.prompt.alert(null, "GeckoZipReader", msg + "\n\n");
   },
 
   displayError: function (msg, e) {
     if(typeof(e) !== "undefined") {
       msg += "\n\n" + e.toString() + "\n\nStack: " + e.stack;
     }
-    Services.prompt.alert(null, "Unzipper", msg + "\n\n");
+    Services.prompt.alert(null, "GeckoZipReader", msg + "\n\n");
   },
 };
 
-unzipper.start();
+geckoZipReader.start(options);
